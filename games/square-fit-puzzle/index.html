@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Square Fit — Rectangle Packing Puzzle</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <a class="back-link" href="../../index.html">&larr; All games</a>
+  <header>
+    <h1>Square&nbsp;Fit</h1>
+    <p class="subtitle">Drag the rectangles onto the square until they tile it perfectly. Click (or tap) a piece to rotate it 90°.</p>
+  </header>
+
+  <section class="controls">
+    <div class="control-group">
+      <label for="gridSize">Square size (cells per side)</label>
+      <input type="number" id="gridSize" min="4" max="24" value="8">
+    </div>
+
+    <div class="control-group mode-group">
+      <label>Piece source</label>
+      <div class="mode-toggle">
+        <button class="mode-btn" data-mode="auto" type="button">Auto-generate</button>
+        <button class="mode-btn active" data-mode="manual" type="button">Manual shapes</button>
+      </div>
+    </div>
+
+    <div class="control-group hidden" id="autoControls">
+      <label for="pieceCount">Number of pieces: <span id="pieceCountVal">12</span></label>
+      <input type="range" id="pieceCount" min="2" max="40" value="12">
+      <label for="lockCount">Lock as starters: <span id="lockCountVal">0</span></label>
+      <input type="range" id="lockCount" min="0" max="10" value="0">
+      <button id="generateBtn" class="primary-btn" type="button">Generate puzzle</button>
+    </div>
+
+    <div class="control-group" id="manualControls">
+      <label for="manualShapes">Pieces — one per line: <code>WxH, color, locked</code>. Color and "locked" are optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
+      <textarea id="manualShapes" rows="8" placeholder="4x3, yellow&#10;2x2, red&#10;2x1, grey, locked"></textarea>
+      <button id="buildBtn" class="primary-btn" type="button">Build puzzle</button>
+      <div id="manualError" class="error-msg"></div>
+    </div>
+
+    <div class="control-group utility-group">
+      <label class="checkbox-label"><input type="checkbox" id="hintToggle"> Show outline hint</label>
+      <button id="resetBtn" class="secondary-btn" type="button">Reset pieces</button>
+    </div>
+  </section>
+  <p class="legend-note">Click a piece's corner badge to toggle 🔒/🔓. Starter pieces begin locked in place — unlock one to pick it up and move it, or leave it be and just fill in the rest.</p>
+
+  <section class="stats">
+    <div>⏱ <span id="timer">0:00</span></div>
+    <div>🔀 Moves: <span id="moves">0</span></div>
+    <div>📦 Remaining: <span id="remaining">0</span></div>
+    <div>🔒 Locked: <span id="lockedCount">0</span></div>
+  </section>
+
+  <section id="playfieldWrap" class="playfield-wrap">
+    <div id="playfield" class="playfield">
+      <div id="squareOuter" class="square-outer">
+        <div id="square" class="square"></div>
+        <div id="hintLayer" class="hint-layer"></div>
+      </div>
+      <div id="trayScroll" class="tray-scroll">
+        <div id="trayContent" class="tray-content"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="winBanner" class="win-banner hidden">
+    <div class="win-card">
+      <h2>🎉 Perfect fit!</h2>
+      <p id="winStats"></p>
+      <button id="playAgainBtn" class="primary-btn" type="button">Play again</button>
+    </div>
+  </div>
+
+  <footer>
+    <p>Pieces are cut from the square with a random guillotine partition (auto mode), or fitted with a backtracking exact-cover solver (manual mode) — so every puzzle is guaranteed solvable, starters included.</p>
+  </footer>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
