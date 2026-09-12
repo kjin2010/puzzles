@@ -1,10 +1,10 @@
 {
-  "name": "Starter Mix (8x8)",
+  "name": "happy-birthday-ian",
   "gridSize": 8,
   "pieceList": "starter-mix-8x8",
   "locked": [
-    { "index": 4, "x": 0, "y": 7, "orientation": "horizontal" },
-    { "index": 9, "x": 3, "y": 7, "orientation": "horizontal" },
-    { "index": 10, "x": 2, "y": 5, "orientation": "vertical" }
+    { "index": 4, "x": 3, "y": 4, "orientation": "vertical" },
+    { "index": 9, "x": 6, "y": 3, "orientation": "horizontal" },
+    { "index": 10, "x": 4, "y": 4, "orientation": "horizontal" }
   ]
 }
