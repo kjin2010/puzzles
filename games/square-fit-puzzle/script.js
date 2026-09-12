@@ -27,6 +27,7 @@
   const manualAreaInfo = document.getElementById('manualAreaInfo');
   const manualError = document.getElementById('manualError');
   const resetBtn = document.getElementById('resetBtn');
+  const undoBtn = document.getElementById('undoBtn');
   const computeBtn = document.getElementById('computeBtn');
   const revealBtn = document.getElementById('revealBtn');
   const solveMsg = document.getElementById('solveMsg');
@@ -85,6 +86,8 @@
 
   let computedSolution = null;  // Map<pieceId, {x,y,w,h}> for the movable pieces
   let solutionRevealed = false;
+
+  let undoStack = []; // {pieceId, placed, locked, gx, gy, x, y, w, h, movesDelta}
 
   let moves = 0;
   let startTime = null;
@@ -355,6 +358,7 @@
   // pre-loaded levels, where the puzzle's fixed pieces are meant to stay put).
   function buildPuzzle(n, shapeDefs, lockedFlags, placements, permanentLock) {
     invalidateSolution();
+    clearUndoHistory();
     clearPieces();
     occupancy = makeEmptyOccupancy(n);
 
@@ -622,7 +626,9 @@
 
   function toggleLock(p) {
     if (!p.placed || p.permanent) return;
+    const before = { placed: p.placed, locked: p.locked, gx: p.gx, gy: p.gy, x: p.x, y: p.y, w: p.w, h: p.h };
     p.locked = !p.locked;
+    pushUndo(p.id, before, 0);
     updatePieceVisual(p);
     updateStatsLabels();
     invalidateSolution();
@@ -645,8 +651,50 @@
     }
   }
 
+  function recomputeOccupancy() {
+    occupancy = makeEmptyOccupancy(gridSize);
+    pieces.forEach(p => { if (p.placed) writeOccupancy(p, p.gx, p.gy, p.id); });
+  }
+
   function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+  }
+
+  // ---- Undo: one step per board-changing action (placement, rotation, lock) --
+  function pushUndo(pieceId, before, movesDelta) {
+    undoStack.push({ pieceId, ...before, movesDelta: movesDelta || 0 });
+    undoBtn.disabled = false;
+  }
+
+  function clearUndoHistory() {
+    undoStack = [];
+    undoBtn.disabled = true;
+  }
+
+  function undo() {
+    if (undoStack.length === 0) return;
+    const snap = undoStack.pop();
+    undoBtn.disabled = undoStack.length === 0;
+    const p = pieces.find(pp => pp.id === snap.pieceId);
+    if (!p) return;
+
+    p.placed = snap.placed;
+    p.locked = snap.locked;
+    p.gx = snap.gx; p.gy = snap.gy;
+    p.x = snap.x; p.y = snap.y;
+    p.w = snap.w; p.h = snap.h;
+
+    attachPieceToContainer(p, p.placed ? squareEl : trayContentEl);
+    recomputeOccupancy();
+    updatePieceVisual(p);
+    growTrayIfNeeded();
+
+    moves = Math.max(0, moves - snap.movesDelta);
+    movesEl.textContent = String(moves);
+    updateStatsLabels();
+    invalidateSolution();
+    winBanner.classList.add('hidden');
+    gameActive = true;
   }
 
   // Puts a piece back exactly where it was before this drag started, and
@@ -758,6 +806,11 @@
     }
 
     let stateChanged = false;
+    const before = {
+      placed: drag.home.placed, locked: false,
+      gx: drag.home.gx, gy: drag.home.gy, x: drag.home.x, y: drag.home.y,
+      w: p.w, h: p.h,
+    };
 
     if (drag.target) {
       writeOccupancy(p, drag.target.gx, drag.target.gy, p.id);
@@ -769,6 +822,7 @@
       attachPieceToContainer(p, squareEl);
       moves++;
       movesEl.textContent = String(moves);
+      pushUndo(p.id, before, 1);
       stateChanged = true;
     } else if (drag.overlapsSquare) {
       // Dropped onto the square, but it doesn't fit there — snap back.
@@ -786,6 +840,7 @@
       p.y = slot.y;
       attachPieceToContainer(p, trayContentEl);
       growTrayIfNeeded();
+      pushUndo(p.id, before, 0);
       stateChanged = true;
     } else {
       // Rearranging a piece within the tray: respect the drop point, but
@@ -817,6 +872,7 @@
         p.y = localY;
         attachPieceToContainer(p, trayContentEl);
         growTrayIfNeeded();
+        pushUndo(p.id, before, 0);
         stateChanged = true;
       }
     }
@@ -829,6 +885,7 @@
   }
 
   function rotatePiece(p) {
+    const before = { placed: p.placed, locked: p.locked, gx: p.gx, gy: p.gy, x: p.x, y: p.y, w: p.w, h: p.h };
     const newW = p.h, newH = p.w;
     if (p.placed) {
       let fits = true;
@@ -855,6 +912,7 @@
       p.y = Math.max(0, p.y);
       growTrayIfNeeded();
     }
+    pushUndo(p.id, before, 0);
     updatePieceVisual(p);
     invalidateSolution();
     checkWin();
@@ -1036,6 +1094,7 @@
   function resetCurrentPieces() {
     if (pieces.length === 0) return;
     invalidateSolution();
+    clearUndoHistory();
     occupancy = makeEmptyOccupancy(gridSize);
     shuffle(pieces);
     pieces.forEach(p => {
@@ -1099,6 +1158,15 @@
   buildBtn.addEventListener('click', startManualPuzzle);
   loadLevelBtn.addEventListener('click', startLevelPuzzle);
   resetBtn.addEventListener('click', resetCurrentPieces);
+  undoBtn.addEventListener('click', undo);
+  document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      undo();
+    }
+  });
   computeBtn.addEventListener('click', computeSolution);
   revealBtn.addEventListener('click', toggleReveal);
   playAgainBtn.addEventListener('click', () => {

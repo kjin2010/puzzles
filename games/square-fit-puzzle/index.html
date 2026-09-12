@@ -37,51 +37,54 @@
   </details>
 
   <section class="controls">
-    <div class="control-group">
-      <label for="gridSize">Square size (cells per side)</label>
-      <input type="number" id="gridSize" min="4" max="9" value="8">
-    </div>
+    <div class="controls-row">
+      <div class="control-group">
+        <label for="gridSize">Square size (cells per side)</label>
+        <input type="number" id="gridSize" min="4" max="9" value="8">
+      </div>
 
-    <div class="control-group mode-group">
-      <label>Piece source</label>
-      <div class="mode-toggle">
-        <button class="mode-btn active" data-mode="levels" type="button">Levels</button>
-        <button class="mode-btn" data-mode="auto" type="button">Auto-generate</button>
-        <button class="mode-btn" data-mode="manual" type="button">Manual shapes</button>
+      <div class="control-group mode-group">
+        <label>Piece source</label>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="levels" type="button">Levels</button>
+          <button class="mode-btn" data-mode="auto" type="button">Auto-generate</button>
+          <button class="mode-btn" data-mode="manual" type="button">Manual shapes</button>
+        </div>
+      </div>
+
+      <div class="control-group" id="levelControls">
+        <label for="levelSelect">Pick a level</label>
+        <select id="levelSelect"></select>
+        <button id="loadLevelBtn" class="primary-btn" type="button">Load level</button>
+        <div id="levelError" class="error-msg"></div>
+      </div>
+
+      <div class="control-group hidden" id="autoControls">
+        <label for="pieceCount">Number of pieces: <span id="pieceCountVal">12</span></label>
+        <input type="range" id="pieceCount" min="2" max="40" value="12">
+        <label for="lockCount">Lock as starters: <span id="lockCountVal">0</span></label>
+        <input type="range" id="lockCount" min="0" max="10" value="0">
+        <button id="generateBtn" class="primary-btn" type="button">Generate puzzle</button>
+      </div>
+
+      <div class="control-group hidden" id="manualControls">
+        <label for="manualShapes">Pieces — one per line: <code>h, w, locked</code>. "locked" is optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
+        <div class="shapes-editor">
+          <div id="manualHighlight" class="shapes-highlight" aria-hidden="true"></div>
+          <textarea id="manualShapes" rows="8" spellcheck="false" placeholder="3, 4&#10;2, 2&#10;1, 2, locked"></textarea>
+        </div>
+        <div id="manualAreaInfo" class="area-info"></div>
+        <button id="buildBtn" class="primary-btn" type="button">Build puzzle</button>
+        <div id="manualError" class="error-msg"></div>
       </div>
     </div>
 
-    <div class="control-group" id="levelControls">
-      <label for="levelSelect">Pick a level</label>
-      <select id="levelSelect"></select>
-      <button id="loadLevelBtn" class="primary-btn" type="button">Load level</button>
-      <div id="levelError" class="error-msg"></div>
-    </div>
-
-    <div class="control-group hidden" id="autoControls">
-      <label for="pieceCount">Number of pieces: <span id="pieceCountVal">12</span></label>
-      <input type="range" id="pieceCount" min="2" max="40" value="12">
-      <label for="lockCount">Lock as starters: <span id="lockCountVal">0</span></label>
-      <input type="range" id="lockCount" min="0" max="10" value="0">
-      <button id="generateBtn" class="primary-btn" type="button">Generate puzzle</button>
-    </div>
-
-    <div class="control-group hidden" id="manualControls">
-      <label for="manualShapes">Pieces — one per line: <code>h, w, locked</code>. "locked" is optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
-      <div class="shapes-editor">
-        <div id="manualHighlight" class="shapes-highlight" aria-hidden="true"></div>
-        <textarea id="manualShapes" rows="8" spellcheck="false" placeholder="3, 4&#10;2, 2&#10;1, 2, locked"></textarea>
-      </div>
-      <div id="manualAreaInfo" class="area-info"></div>
-      <button id="buildBtn" class="primary-btn" type="button">Build puzzle</button>
-      <div id="manualError" class="error-msg"></div>
-    </div>
-
-    <div class="control-group utility-group">
+    <div class="controls-row actions-row">
+      <button id="undoBtn" class="secondary-btn" type="button" disabled title="Feature brought to you by Annie You">Undo</button>
+      <button id="resetBtn" class="secondary-btn" type="button">Reset pieces</button>
       <button id="computeBtn" class="secondary-btn" type="button">Compute solution</button>
       <button id="revealBtn" class="secondary-btn" type="button" disabled>Reveal solution</button>
       <span id="solveMsg" class="solve-msg"></span>
-      <button id="resetBtn" class="secondary-btn" type="button">Reset pieces</button>
     </div>
   </section>
   <p class="legend-note">Click a piece's corner badge to toggle 🔒/🔓. Starter pieces begin locked in place — unlock one to pick it up and move it, or leave it be and just fill in the rest. (Pieces fixed by a level can't be unlocked.)</p>

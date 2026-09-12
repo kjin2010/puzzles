@@ -106,7 +106,7 @@ header h1 {
 
 .controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 16px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -114,6 +114,18 @@ header h1 {
   padding: 18px;
   box-shadow: var(--shadow);
   margin-bottom: 16px;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.actions-row {
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .control-group {
@@ -124,13 +136,6 @@ header h1 {
 }
 
 .control-group.hidden { display: none; }
-
-.utility-group {
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-  margin-left: auto;
-}
 
 label {
   font-size: 0.82rem;
