@@ -351,7 +351,9 @@
   // shapeDefs: [{a,b,color?}]; lockedFlags: parallel array of booleans;
   // placements: parallel array of {x,y,w,h} — the position each locked piece
   // starts at (movable pieces ignore this; they scatter to the tray instead).
-  function buildPuzzle(n, shapeDefs, lockedFlags, placements) {
+  // permanentLock: when true, starter pieces can never be unlocked (used for
+  // pre-loaded levels, where the puzzle's fixed pieces are meant to stay put).
+  function buildPuzzle(n, shapeDefs, lockedFlags, placements, permanentLock) {
     invalidateSolution();
     clearPieces();
     occupancy = makeEmptyOccupancy(n);
@@ -375,6 +377,7 @@
         placed: locked,
         locked: locked,
         starter: locked,
+        permanent: locked && !!permanentLock,
         gx: locked ? place.x : -1,
         gy: locked ? place.y : -1,
         color,
@@ -419,6 +422,39 @@
       shelfH = Math.max(shelfH, h);
     }
     growTrayIfNeeded();
+  }
+
+  // A guaranteed-empty spot below every other tray piece, used when a drop
+  // would otherwise overlap something.
+  function findBottomTraySlot() {
+    const pad = 10;
+    let maxBottom = pad;
+    pieces.forEach(other => {
+      if (!other.placed) maxBottom = Math.max(maxBottom, other.y + other.h * cellPx + pad);
+    });
+    return { x: pad, y: maxBottom };
+  }
+
+  // Used when a piece is returned to the tray from the board: scans corner
+  // candidates (each other piece's right/bottom edge, plus the top-left) in
+  // reading order and returns the first spot the piece fits without
+  // overlapping anything, falling back to the very bottom if none fit.
+  function findFirstFitTraySlot(pieceW, pieceH, excludePiece) {
+    const pad = 10;
+    const maxW = TRAY_WIDTH - pad;
+    const others = pieces.filter(o => o !== excludePiece && !o.placed);
+
+    const xs = Array.from(new Set([pad, ...others.map(o => o.x + o.w * cellPx + pad)])).sort((a, b) => a - b);
+    const ys = Array.from(new Set([pad, ...others.map(o => o.y + o.h * cellPx + pad)])).sort((a, b) => a - b);
+
+    for (const y of ys) {
+      for (const x of xs) {
+        if (x + pieceW > maxW) continue;
+        const collides = others.some(o => rectsOverlap(x, y, pieceW, pieceH, o.x, o.y, o.w * cellPx, o.h * cellPx));
+        if (!collides) return { x, y };
+      }
+    }
+    return findBottomTraySlot();
   }
 
   // Ensures #trayContent is tall enough to contain every tray piece, growing
@@ -574,18 +610,18 @@
 
     if (p.placed) {
       p.badgeEl.classList.remove('hidden');
-      p.badgeEl.disabled = false;
+      p.badgeEl.disabled = !!p.permanent;
       p.badgeEl.textContent = p.locked ? '🔒' : '🔓';
       p.badgeEl.classList.toggle('lock-badge-locked', p.locked);
       p.badgeEl.classList.toggle('lock-badge-unlocked', !p.locked);
-      p.badgeEl.setAttribute('aria-label', p.locked ? 'Unlock piece' : 'Lock piece');
+      p.badgeEl.setAttribute('aria-label', p.permanent ? 'Locked (fixed by this level)' : (p.locked ? 'Unlock piece' : 'Lock piece'));
     } else {
       p.badgeEl.classList.add('hidden');
     }
   }
 
   function toggleLock(p) {
-    if (!p.placed) return;
+    if (!p.placed || p.permanent) return;
     p.locked = !p.locked;
     updatePieceVisual(p);
     updateStatsLabels();
@@ -737,9 +773,24 @@
     } else if (drag.overlapsSquare) {
       // Dropped onto the square, but it doesn't fit there — snap back.
       revertToHome(p, drag.home);
+    } else if (drag.home.placed) {
+      // Returning a piece from the board: it's always slotted into the
+      // first open gap in the tray, regardless of exactly where it was
+      // released — no need to aim.
+      const pieceW = p.w * cellPx, pieceH = p.h * cellPx;
+      const slot = findFirstFitTraySlot(pieceW, pieceH, p);
+      p.placed = false;
+      p.gx = -1; p.gy = -1;
+      p.locked = false;
+      p.x = slot.x;
+      p.y = slot.y;
+      attachPieceToContainer(p, trayContentEl);
+      growTrayIfNeeded();
+      stateChanged = true;
     } else {
-      // Dropped in/around the tray. Pieces in the tray can't overlap each
-      // other, so check before committing the new spot.
+      // Rearranging a piece within the tray: respect the drop point, but
+      // bounce it back to where it started if that would overlap another
+      // piece there.
       // Use the scroll viewport's rect (fixed regardless of scroll
       // position), not the scrolled content's rect (which already bakes
       // the scroll offset in) — mixing the two double-counts it.
@@ -973,7 +1024,7 @@
       computeGeometry(n);
       const shapeDefs = shapes.map(s => ({ a: s.a, b: s.b }));
       const lockedFlags = shapes.map(s => s.locked);
-      buildPuzzle(n, shapeDefs, lockedFlags, placements);
+      buildPuzzle(n, shapeDefs, lockedFlags, placements, true);
     })().catch(err => {
       levelError.textContent = err.message || String(err);
     }).finally(() => {

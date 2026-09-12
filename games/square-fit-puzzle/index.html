@@ -28,7 +28,7 @@
       <ul>
         <li>Drag a piece from the tray onto the grid — it snaps to the nearest cell.</li>
         <li>Click a piece without dragging it to rotate it 90°.</li>
-        <li>Click a placed piece's corner badge to lock 🔒 or unlock 🔓 it, so it won't move by accident. Starter pieces begin locked — unlock one to pick it up.</li>
+        <li>Click a placed piece's corner badge to lock 🔒 or unlock 🔓 it, so it won't move by accident. Starter pieces from Auto-generate or Manual shapes begin locked — unlock one to pick it up. Pieces fixed by a level stay locked for good.</li>
         <li>Pieces in the tray can't overlap each other — dropping one on top of another snaps it back to where it started.</li>
         <li>Stuck? <strong>Compute solution</strong> checks whether the board is still solvable given whatever's currently locked, then <strong>Reveal solution</strong> shows where every remaining piece goes.</li>
       </ul>
@@ -84,7 +84,7 @@
       <button id="resetBtn" class="secondary-btn" type="button">Reset pieces</button>
     </div>
   </section>
-  <p class="legend-note">Click a piece's corner badge to toggle 🔒/🔓. Starter pieces begin locked in place — unlock one to pick it up and move it, or leave it be and just fill in the rest.</p>
+  <p class="legend-note">Click a piece's corner badge to toggle 🔒/🔓. Starter pieces begin locked in place — unlock one to pick it up and move it, or leave it be and just fill in the rest. (Pieces fixed by a level can't be unlocked.)</p>
 
   <section class="stats">
     <div>⏱ <span id="timer">0:00</span></div>
