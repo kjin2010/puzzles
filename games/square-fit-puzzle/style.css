@@ -13,6 +13,7 @@
   --good: #3f9142;
   --bad: #c1442d;
   --shadow: 0 2px 8px rgba(35, 32, 26, 0.08);
+  --hint-border: rgba(35, 32, 26, 0.6);
 }
 
 * { box-sizing: border-box; }
@@ -42,6 +43,53 @@ body {
 
 .back-link:hover {
   color: var(--accent);
+}
+
+.howto {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.howto summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.howto-body {
+  margin-top: 10px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.howto-body h3 {
+  margin: 12px 0 4px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.howto-body h3:first-child { margin-top: 0; }
+
+.howto-body ul {
+  margin: 0 0 4px 18px;
+  padding: 0;
+}
+
+.howto-body li { margin-bottom: 4px; }
+
+.howto-body code {
+  background: var(--tray-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
 }
 
 header h1 {
@@ -103,7 +151,52 @@ textarea {
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85rem;
+  line-height: 1.4;
 }
+
+.shapes-editor {
+  position: relative;
+}
+
+.shapes-editor textarea {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  width: 100%;
+  display: block;
+}
+
+.shapes-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  color: transparent;
+  pointer-events: none;
+}
+
+.bad-line {
+  background: rgba(193, 68, 45, 0.28);
+  border-radius: 2px;
+}
+
+.area-info {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.area-info.area-ok { color: var(--good); }
+.area-info.area-over { color: var(--bad); }
 
 input[type="range"] { accent-color: var(--accent); }
 
@@ -150,6 +243,26 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 .secondary-btn:hover { background: var(--tray-bg); }
+
+.primary-btn:disabled, .secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.secondary-btn:disabled:hover { background: #fff; }
+
+.secondary-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.solve-msg {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.solve-msg.solve-fail { color: var(--bad); }
 
 .checkbox-label {
   display: flex;
@@ -225,7 +338,7 @@ input[type="range"] { accent-color: var(--accent); }
 
 .hint-rect {
   position: absolute;
-  border: 2px dashed rgba(35, 32, 26, 0.55);
+  border: 2px dashed var(--hint-border);
   border-radius: 2px;
 }
 
@@ -270,6 +383,21 @@ input[type="range"] { accent-color: var(--accent); }
 .piece.locked-piece {
   cursor: not-allowed;
   box-shadow: none;
+  filter: saturate(0.35) brightness(0.94);
+  outline: 3px dashed rgba(0,0,0,0.55);
+  outline-offset: -3px;
+}
+
+.piece.locked-piece::after {
+  content: "🔒";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  opacity: 0.32;
+  pointer-events: none;
 }
 
 .piece.starter-piece {
@@ -280,28 +408,36 @@ input[type="range"] { accent-color: var(--accent); }
 
 .lock-badge {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
+  top: -12px;
+  right: -12px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  border: 1px solid rgba(0,0,0,0.3);
+  border: 2px solid rgba(0,0,0,0.35);
   background: #fff;
   color: #23201a;
-  font-size: 11px;
-  line-height: 18px;
+  font-size: 16px;
+  line-height: 26px;
   text-align: center;
   padding: 0;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-
-.lock-badge.static {
-  cursor: default;
-  background: #efeade;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  z-index: 1;
 }
 
 .lock-badge.hidden { display: none; }
+
+.lock-badge.lock-badge-locked {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.lock-badge.lock-badge-unlocked {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}
 
 .win-banner {
   position: fixed;
@@ -344,6 +480,7 @@ footer {
     --grid-bg: #201e19;
     --tray-bg: #2c2921;
     --shadow: 0 2px 10px rgba(0,0,0,0.4);
+    --hint-border: rgba(241, 237, 227, 0.65);
   }
   input[type="number"], textarea, .mode-btn, .secondary-btn { background: #2c2921; color: var(--ink); }
   .win-card { background: #24221c; }

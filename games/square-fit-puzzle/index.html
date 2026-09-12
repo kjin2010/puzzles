@@ -3,21 +3,42 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Square Fit — Rectangle Packing Puzzle</title>
+<title>Cover the Square — Rectangle Packing Puzzle</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="app">
   <a class="back-link" href="../../index.html">&larr; All games</a>
   <header>
-    <h1>Square&nbsp;Fit</h1>
+    <h1>Cover the Square</h1>
     <p class="subtitle">Drag the rectangles onto the square until they tile it perfectly. Click (or tap) a piece to rotate it 90°.</p>
   </header>
+
+  <details class="howto">
+    <summary>How to play</summary>
+    <div class="howto-body">
+      <h3>Setup</h3>
+      <ul>
+        <li><strong>Square size</strong> — cells per side, up to 9.</li>
+        <li><strong>Auto-generate</strong> — pick a piece count (and how many start locked as "starters"), then Generate. Pieces are cut straight out of the square, so it's always solvable.</li>
+        <li><strong>Manual shapes</strong> — type one piece per line: <code>h, w, locked</code>. "locked" is optional — colors are assigned automatically. Add <code>locked@x-y</code> instead of <code>locked</code> to pin a piece to an exact top-left cell (0-indexed). Piece areas must add up to size².</li>
+      </ul>
+      <h3>Playing</h3>
+      <ul>
+        <li>Drag a piece from the tray onto the grid — it snaps to the nearest cell.</li>
+        <li>Click a piece without dragging it to rotate it 90°.</li>
+        <li>Click a placed piece's corner badge to lock 🔒 or unlock 🔓 it, so it won't move by accident. Starter pieces begin locked — unlock one to pick it up.</li>
+        <li>Pieces in the tray can't overlap each other — dropping one on top of another snaps it back to where it started.</li>
+        <li>Stuck? <strong>Compute solution</strong> checks whether the board is still solvable given whatever's currently locked, then <strong>Reveal solution</strong> shows where every remaining piece goes.</li>
+      </ul>
+      <p>Win by covering every cell of the square with no gaps or overlaps.</p>
+    </div>
+  </details>
 
   <section class="controls">
     <div class="control-group">
       <label for="gridSize">Square size (cells per side)</label>
-      <input type="number" id="gridSize" min="4" max="24" value="8">
+      <input type="number" id="gridSize" min="4" max="9" value="8">
     </div>
 
     <div class="control-group mode-group">
@@ -37,14 +58,20 @@
     </div>
 
     <div class="control-group" id="manualControls">
-      <label for="manualShapes">Pieces — one per line: <code>WxH, color, locked</code>. Color and "locked" are optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
-      <textarea id="manualShapes" rows="8" placeholder="4x3, yellow&#10;2x2, red&#10;2x1, grey, locked"></textarea>
+      <label for="manualShapes">Pieces — one per line: <code>h, w, locked</code>. "locked" is optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
+      <div class="shapes-editor">
+        <div id="manualHighlight" class="shapes-highlight" aria-hidden="true"></div>
+        <textarea id="manualShapes" rows="8" spellcheck="false" placeholder="3, 4&#10;2, 2&#10;1, 2, locked"></textarea>
+      </div>
+      <div id="manualAreaInfo" class="area-info"></div>
       <button id="buildBtn" class="primary-btn" type="button">Build puzzle</button>
       <div id="manualError" class="error-msg"></div>
     </div>
 
     <div class="control-group utility-group">
-      <label class="checkbox-label"><input type="checkbox" id="hintToggle"> Show outline hint</label>
+      <button id="computeBtn" class="secondary-btn" type="button">Compute solution</button>
+      <button id="revealBtn" class="secondary-btn" type="button" disabled>Reveal solution</button>
+      <span id="solveMsg" class="solve-msg"></span>
       <button id="resetBtn" class="secondary-btn" type="button">Reset pieces</button>
     </div>
   </section>

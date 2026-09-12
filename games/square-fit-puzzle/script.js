@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Square Fit — a rectangle-packing puzzle.
+// Cover the Square — a rectangle-packing puzzle.
 //
 // A square of N x N cells is filled with rectangles: either cut out by a
 // random guillotine-cut algorithm (auto mode), or typed in by hand as a list
-// of "WxH, color, locked" lines that get fitted by a backtracking exact-cover
+// of "h, w, color, locked" lines that get fitted by a backtracking exact-cover
 // solver (manual mode). Some pieces can be marked as locked "starters" — they
 // are placed immediately and can't be moved; the rest scatter into a tray and
 // you drag + rotate them to fill in what's left. Any piece you place can also
@@ -23,9 +23,13 @@
   const generateBtn = document.getElementById('generateBtn');
   const buildBtn = document.getElementById('buildBtn');
   const manualShapes = document.getElementById('manualShapes');
+  const manualHighlight = document.getElementById('manualHighlight');
+  const manualAreaInfo = document.getElementById('manualAreaInfo');
   const manualError = document.getElementById('manualError');
   const resetBtn = document.getElementById('resetBtn');
-  const hintToggle = document.getElementById('hintToggle');
+  const computeBtn = document.getElementById('computeBtn');
+  const revealBtn = document.getElementById('revealBtn');
+  const solveMsg = document.getElementById('solveMsg');
   const modeBtns = document.querySelectorAll('.mode-btn');
   const autoControls = document.getElementById('autoControls');
   const manualControls = document.getElementById('manualControls');
@@ -45,14 +49,7 @@
   const winStats = document.getElementById('winStats');
   const playAgainBtn = document.getElementById('playAgainBtn');
 
-  // ---- Named colors (for manual mode) ---------------------------------------
-  const COLOR_NAMES = {
-    red: '#d1453d', yellow: '#e8b93d', white: '#f6f3ea', blue: '#3f6fb0',
-    grey: '#8d8577', gray: '#8d8577', green: '#4f9a52', orange: '#d9812f',
-    purple: '#8656a8', pink: '#d97ba8', black: '#2b2823', brown: '#86593b',
-    teal: '#3f9a94', cyan: '#46b8c2', navy: '#2c3f66', lime: '#9ac23f',
-    magenta: '#b8438f', silver: '#b8b2a3', gold: '#d1a63d',
-  };
+  const MAX_GRID_SIZE = 9;
 
   function contrastTextColor(hex) {
     const c = hex.replace('#', '');
@@ -68,6 +65,10 @@
     return `hsl(${hue} 60% 52%)`;
   }
 
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   // ---- Geometry / state -----------------------------------------------------
   const MAX_SQUARE_PX = 560;
   const TRAY_WIDTH = 380;
@@ -75,9 +76,11 @@
   let gridSize = 8;
   let cellPx = 48;
 
-  let pieces = [];         // {id,w,h,x,y,placed,locked,starter,gx,gy,el,color,textColor}
-  let occupancy = [];       // gridSize x gridSize -> piece id or -1
-  let solutionRects = null;  // hint overlay targets for the movable pieces
+  let pieces = [];          // {id,a,b,w,h,x,y,placed,locked,starter,gx,gy,el,color,textColor}
+  let occupancy = [];        // gridSize x gridSize -> piece id or -1
+
+  let computedSolution = null;  // Map<pieceId, {x,y,w,h}> for the movable pieces
+  let solutionRevealed = false;
 
   let moves = 0;
   let startTime = null;
@@ -95,8 +98,13 @@
     }
     return arr;
   }
+  function currentGridSizeSetting() {
+    return clamp(parseInt(gridSizeInput.value, 10) || 8, 4, MAX_GRID_SIZE);
+  }
 
   // ---- Auto-generation: random guillotine partition ---------------------------
+  // Every rectangle here is cut directly out of the square, so the resulting
+  // set of pieces is always solvable by construction.
   function generateAutoRects(n, targetPieces) {
     let rects = [{ x: 0, y: 0, w: n, h: n }];
     let guard = 0;
@@ -130,33 +138,48 @@
     return rects;
   }
 
-  // ---- Manual mode: parse "WxH, color, locked[@x-y]" lines -------------------
+  // ---- Manual mode: parse "h, w, locked[@x-y]" lines ---------------------------
+  // Parses a single line. Returns {a (width), b (height), locked, fixedX,
+  // fixedY} or {error}. Shared by the full-text parser below and by the live
+  // per-line highlighter, so both agree on what's valid. Colors are always
+  // auto-assigned (like auto mode), so there's nothing to type for them.
+  function parseShapeLine(line, n) {
+    const parts = line.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length < 2) return { error: `need "h, w" — got "${line}"` };
+    const h = Number(parts[0]);
+    const w = Number(parts[1]);
+    if (!Number.isInteger(h) || !Number.isInteger(w) || h <= 0 || w <= 0) {
+      return { error: `"${parts[0]}, ${parts[1]}" isn't a valid height, width pair` };
+    }
+    if (h > n || w > n) {
+      return { error: `${h}x${w} (h,w) doesn't fit in a ${n}x${n} square` };
+    }
+    let locked = false, fixedX = null, fixedY = null;
+    for (let i = 2; i < parts.length; i++) {
+      const tok = parts[i].toLowerCase();
+      if (tok === 'locked') { locked = true; continue; }
+      const m = tok.match(/^locked@(\d+)-(\d+)$/);
+      if (m) { locked = true; fixedX = parseInt(m[1], 10); fixedY = parseInt(m[2], 10); continue; }
+      return { error: `couldn't understand "${parts[i]}" — use "locked"` };
+    }
+    if (fixedX !== null && (fixedX < 0 || fixedY < 0 || fixedX + w > n || fixedY + h > n)) {
+      return { error: `locked position (${fixedX},${fixedY}) doesn't fit a ${w}x${h} piece in the ${n}x${n} square` };
+    }
+    return { a: w, b: h, locked, fixedX, fixedY };
+  }
+
   function parseCustomShapes(text, n) {
     const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
-    if (lines.length === 0) return { error: 'Enter at least one piece, like "3x4, blue".' };
+    if (lines.length === 0) return { error: 'Enter at least one piece, like "3, 4, blue".' };
     const shapes = [];
-    for (const line of lines) {
-      const parts = line.split(',').map(s => s.trim()).filter(Boolean);
-      const dimMatch = parts[0] && parts[0].match(/^(\d+)\s*[x×X]\s*(\d+)$/);
-      if (!dimMatch) return { error: `Couldn't parse "${line}" — start each line with W x H, e.g. "3x4, blue".` };
-      const a = parseInt(dimMatch[1], 10), b = parseInt(dimMatch[2], 10);
-      if (a <= 0 || b <= 0 || a > n || b > n) {
-        return { error: `Piece ${a}x${b} doesn't fit in a ${n}x${n} square.` };
-      }
-      let locked = false, fixedX = null, fixedY = null, color = null, colorName = null;
-      for (let i = 1; i < parts.length; i++) {
-        const tok = parts[i].toLowerCase();
-        if (tok === 'locked') { locked = true; continue; }
-        const m = tok.match(/^locked@(\d+)-(\d+)$/);
-        if (m) { locked = true; fixedX = parseInt(m[1], 10); fixedY = parseInt(m[2], 10); continue; }
-        if (COLOR_NAMES[tok]) { color = COLOR_NAMES[tok]; colorName = tok; continue; }
-        return { error: `Couldn't understand "${parts[i]}" in "${line}" — use a color name or "locked".` };
-      }
-      if (fixedX !== null && (fixedX < 0 || fixedY < 0 || fixedX + a > n || fixedY + b > n)) {
-        return { error: `Locked position for ${a}x${b} at (${fixedX},${fixedY}) doesn't fit in the ${n}x${n} square.` };
-      }
-      shapes.push({ a, b, locked, fixedX, fixedY, color, colorName });
-    }
+    const errors = [];
+    lines.forEach((line, idx) => {
+      const result = parseShapeLine(line, n);
+      if (result.error) errors.push(`Line ${idx + 1}: ${result.error}.`);
+      else shapes.push(result);
+    });
+    if (errors.length > 0) return { error: errors.join(' ') };
+
     const sumArea = shapes.reduce((s, r) => s + r.a * r.b, 0);
     if (sumArea !== n * n) {
       return { error: `Piece areas sum to ${sumArea}, but a ${n}x${n} square needs ${n * n}.` };
@@ -173,10 +196,38 @@
         }
       }
     }
-    if (n > 16 && shapes.length > 26) {
-      return { error: `That's a lot to solve at once — try a smaller grid or fewer pieces.` };
-    }
     return { shapes };
+  }
+
+  // Live-updates the red syntax highlighting behind the textarea and the
+  // running area total below it, on every keystroke.
+  function refreshManualEditor() {
+    if (!manualHighlight || !manualAreaInfo) return;
+    const n = currentGridSizeSetting();
+    const rawLines = manualShapes.value.split('\n');
+    let used = 0, invalidCount = 0;
+    const htmlLines = rawLines.map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      const result = parseShapeLine(trimmed, n);
+      if (result.error) { invalidCount++; return `<span class="bad-line">${escapeHtml(line)}</span>`; }
+      used += result.a * result.b;
+      return escapeHtml(line);
+    });
+    manualHighlight.innerHTML = htmlLines.join('\n');
+    manualHighlight.scrollTop = manualShapes.scrollTop;
+    manualHighlight.scrollLeft = manualShapes.scrollLeft;
+
+    const total = n * n;
+    const remaining = total - used;
+    let text = `Area: ${used} / ${total} used`;
+    if (remaining > 0) text += ` (${remaining} remaining)`;
+    else if (remaining < 0) text += ` (${-remaining} over the limit)`;
+    else text += ' — exactly covers the square ✓';
+    if (invalidCount > 0) text += ` · ${invalidCount} line${invalidCount === 1 ? '' : 's'} need${invalidCount === 1 ? 's' : ''} fixing`;
+    manualAreaInfo.textContent = text;
+    manualAreaInfo.classList.toggle('area-over', remaining < 0);
+    manualAreaInfo.classList.toggle('area-ok', remaining === 0 && invalidCount === 0);
   }
 
   // shapes: [{a,b,fixedX,fixedY,...}]. Pieces with fixedX/fixedY are placed
@@ -283,9 +334,10 @@
   }
 
   // shapeDefs: [{a,b,color?}]; lockedFlags: parallel array of booleans;
-  // placements: parallel array of {x,y,w,h} — the position each piece starts
-  // at (locked) or targets (hint, for movable pieces).
+  // placements: parallel array of {x,y,w,h} — the position each locked piece
+  // starts at (movable pieces ignore this; they scatter to the tray instead).
   function buildPuzzle(n, shapeDefs, lockedFlags, placements) {
+    invalidateSolution();
     clearPieces();
     occupancy = makeEmptyOccupancy(n);
 
@@ -297,7 +349,7 @@
       const def = shapeDefs[idx];
       const locked = !!lockedFlags[idx];
       const place = placements[idx];
-      const color = def.color || colorForIndex(colorCursor++, total);
+      const color = colorForIndex(colorCursor++, total);
       const rotated = !locked && Math.random() < 0.5;
       const p = {
         id: idx,
@@ -324,11 +376,9 @@
     });
 
     pieces.filter(p => p.locked).forEach(p => writeOccupancy(p, p.gx, p.gy, p.id));
-    solutionRects = pieces.filter(p => !p.locked).map(p => placements[p.id]).filter(Boolean);
 
     layoutTray();
     pieces.forEach(createPieceElement);
-    renderHint();
     resetStats();
     gameActive = true;
     updateStatsLabels();
@@ -371,10 +421,64 @@
     pieces = [];
   }
 
-  function renderHint() {
+  // ---- Compute solution / reveal solution ------------------------------------
+  // Solves the CURRENT board: any piece that's locked right now (a starter,
+  // or one you locked yourself) is treated as a fixed constraint at its
+  // current position; everything else is free to be placed anywhere.
+  function computeSolution() {
+    if (!gameActive || pieces.length === 0) return;
+    const n = gridSize;
+    const shapesForSolve = pieces.map(p => (
+      p.locked
+        ? { a: p.w, b: p.h, fixedX: p.gx, fixedY: p.gy }
+        : { a: p.a, b: p.b, fixedX: null, fixedY: null }
+    ));
+
+    computeBtn.disabled = true;
+    computeBtn.textContent = 'Computing…';
+    revealBtn.disabled = true;
+    solveMsg.textContent = '';
+    solveMsg.classList.remove('solve-fail');
+
+    setTimeout(() => {
+      const placements = solveExactCover(n, shapesForSolve);
+      computeBtn.disabled = false;
+      computeBtn.textContent = 'Compute solution';
+
+      if (placements === 'timeout') {
+        solveMsg.textContent = 'Took too long to check — try a smaller or simpler board.';
+        solveMsg.classList.add('solve-fail');
+        computedSolution = null;
+        return;
+      }
+      if (!placements) {
+        solveMsg.textContent = 'No solution exists with pieces locked where they are — unlock or move one and try again.';
+        solveMsg.classList.add('solve-fail');
+        computedSolution = null;
+        return;
+      }
+      computedSolution = new Map();
+      pieces.forEach((p, i) => { if (!p.locked) computedSolution.set(p.id, placements[i]); });
+      solveMsg.textContent = 'Solvable! Click "Reveal solution" to see it.';
+      revealBtn.disabled = false;
+    }, 10);
+  }
+
+  function toggleReveal() {
+    if (!computedSolution) return;
+    solutionRevealed = !solutionRevealed;
+    revealBtn.textContent = solutionRevealed ? 'Hide solution' : 'Reveal solution';
+    revealBtn.classList.toggle('active', solutionRevealed);
+    renderSolutionOverlay();
+  }
+
+  function renderSolutionOverlay() {
     hintLayer.innerHTML = '';
-    if (!solutionRects) return;
-    for (const r of solutionRects) {
+    if (!solutionRevealed || !computedSolution) {
+      hintLayer.style.display = 'none';
+      return;
+    }
+    for (const r of computedSolution.values()) {
       const div = document.createElement('div');
       div.className = 'hint-rect';
       div.style.left = (r.x * cellPx) + 'px';
@@ -383,7 +487,26 @@
       div.style.height = (r.h * cellPx) + 'px';
       hintLayer.appendChild(div);
     }
-    hintLayer.style.display = hintToggle.checked ? 'block' : 'none';
+    hintLayer.style.display = 'block';
+  }
+
+  // Any change to the board (a piece moves, rotates, or gets locked/unlocked)
+  // can change whether — and how — the puzzle is solvable, so a previously
+  // computed solution is no longer trustworthy.
+  function invalidateSolution() {
+    computedSolution = null;
+    solutionRevealed = false;
+    if (revealBtn) {
+      revealBtn.disabled = true;
+      revealBtn.textContent = 'Reveal solution';
+      revealBtn.classList.remove('active');
+    }
+    if (solveMsg) {
+      solveMsg.textContent = '';
+      solveMsg.classList.remove('solve-fail');
+    }
+    hintLayer.innerHTML = '';
+    hintLayer.style.display = 'none';
   }
 
   // ---- Piece element + drag handling ---------------------------------------
@@ -438,6 +561,9 @@
       p.badgeEl.classList.remove('hidden');
       p.badgeEl.disabled = false;
       p.badgeEl.textContent = p.locked ? '🔒' : '🔓';
+      p.badgeEl.classList.toggle('lock-badge-locked', p.locked);
+      p.badgeEl.classList.toggle('lock-badge-unlocked', !p.locked);
+      p.badgeEl.setAttribute('aria-label', p.locked ? 'Unlock piece' : 'Lock piece');
     } else {
       p.badgeEl.classList.add('hidden');
     }
@@ -448,6 +574,7 @@
     p.locked = !p.locked;
     updatePieceVisual(p);
     updateStatsLabels();
+    invalidateSolution();
   }
 
   function occupancyFits(p, gx, gy) {
@@ -471,11 +598,23 @@
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
+  // Puts a piece back exactly where it was before this drag started, and
+  // flashes it red so the "snap back" reads as a rejection, not a glitch.
+  function revertToHome(p, home) {
+    p.placed = home.placed;
+    p.gx = home.gx; p.gy = home.gy;
+    p.x = home.x; p.y = home.y;
+    if (p.placed) writeOccupancy(p, p.gx, p.gy, p.id);
+    attachPieceToContainer(p, p.placed ? squareEl : trayContentEl);
+    p.el.classList.add('invalid-drop');
+    setTimeout(() => p.el.classList.remove('invalid-drop'), 220);
+  }
+
   // Dragging reparents the piece to <body> as a position:fixed element using
   // viewport coordinates, so it can float freely over both the square and the
   // independently-scrolling tray without being clipped or needing coordinate
   // translation. It's reparented back into the square or the tray on drop.
-  let drag = null; // {p, offX, offY, startClientX, startClientY, moved, target}
+  let drag = null;
 
   function onPointerDown(e, p) {
     if (!gameActive || p.locked) return;
@@ -489,6 +628,8 @@
       startClientY: e.clientY,
       moved: false,
       target: null,
+      overlapsSquare: false,
+      home: { placed: p.placed, gx: p.gx, gy: p.gy, x: p.x, y: p.y },
     };
     if (p.placed) writeOccupancy(p, p.gx, p.gy, -1);
 
@@ -520,6 +661,7 @@
 
     const overlapsSquare = rectsOverlap(rawX, rawY, pieceW, pieceH,
       squareRect.left, squareRect.top, squareRect.width, squareRect.height);
+    drag.overlapsSquare = overlapsSquare;
 
     p.el.classList.remove('valid-drop', 'invalid-drop');
 
@@ -564,6 +706,8 @@
       return;
     }
 
+    let stateChanged = false;
+
     if (drag.target) {
       writeOccupancy(p, drag.target.gx, drag.target.gy, p.id);
       p.gx = drag.target.gx;
@@ -574,12 +718,17 @@
       attachPieceToContainer(p, squareEl);
       moves++;
       movesEl.textContent = String(moves);
+      stateChanged = true;
+    } else if (drag.overlapsSquare) {
+      // Dropped onto the square, but it doesn't fit there — snap back.
+      revertToHome(p, drag.home);
     } else {
-      p.placed = false;
-      p.gx = -1; p.gy = -1;
-      p.locked = false;
-
-      const trayRect = trayContentEl.getBoundingClientRect();
+      // Dropped in/around the tray. Pieces in the tray can't overlap each
+      // other, so check before committing the new spot.
+      // Use the scroll viewport's rect (fixed regardless of scroll
+      // position), not the scrolled content's rect (which already bakes
+      // the scroll offset in) — mixing the two double-counts it.
+      const trayRect = trayScrollEl.getBoundingClientRect();
       const pieceW = p.w * cellPx, pieceH = p.h * cellPx;
       const curLeft = parseFloat(p.el.style.left) || 0;
       const curTop = parseFloat(p.el.style.top) || 0;
@@ -587,13 +736,28 @@
       let localY = curTop - trayRect.top + trayScrollEl.scrollTop;
       localX = clamp(localX, 0, Math.max(0, trayContentEl.clientWidth - pieceW));
       localY = Math.max(0, localY);
-      p.x = localX;
-      p.y = localY;
-      attachPieceToContainer(p, trayContentEl);
-      growTrayIfNeeded();
+
+      const overlapsOther = pieces.some(other => other !== p && !other.placed &&
+        rectsOverlap(localX, localY, pieceW, pieceH,
+          other.x, other.y, other.w * cellPx, other.h * cellPx));
+
+      if (overlapsOther) {
+        revertToHome(p, drag.home);
+      } else {
+        p.placed = false;
+        p.gx = -1; p.gy = -1;
+        p.locked = false;
+        p.x = localX;
+        p.y = localY;
+        attachPieceToContainer(p, trayContentEl);
+        growTrayIfNeeded();
+        stateChanged = true;
+      }
     }
+
     updatePieceVisual(p);
     updateStatsLabels();
+    if (stateChanged) invalidateSolution();
     checkWin();
     drag = null;
   }
@@ -626,6 +790,7 @@
       growTrayIfNeeded();
     }
     updatePieceVisual(p);
+    invalidateSolution();
     checkWin();
   }
 
@@ -665,7 +830,7 @@
   // ---- Puzzle generation entry points ---------------------------------------
   function startAutoPuzzle() {
     manualError.textContent = '';
-    const n = clamp(parseInt(gridSizeInput.value, 10) || 10, 4, 24);
+    const n = currentGridSizeSetting();
     gridSizeInput.value = n;
     const count = clamp(parseInt(pieceCountInput.value, 10) || 12, 2, 40);
     const lockN = clamp(parseInt(lockCountInput.value, 10) || 0, 0, count);
@@ -677,11 +842,12 @@
     const lockedFlags = rects.map((_, i) => lockedIdx.has(i));
     const placements = rects.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h }));
     buildPuzzle(n, shapeDefs, lockedFlags, placements);
+    refreshManualEditor();
   }
 
   function startManualPuzzle() {
     manualError.textContent = '';
-    const n = clamp(parseInt(gridSizeInput.value, 10) || 10, 4, 24);
+    const n = currentGridSizeSetting();
     gridSizeInput.value = n;
     const parsed = parseCustomShapes(manualShapes.value, n);
     if (parsed.error) {
@@ -703,14 +869,16 @@
         return;
       }
       computeGeometry(n);
-      const shapeDefs = parsed.shapes.map(s => ({ a: s.a, b: s.b, color: s.color }));
+      const shapeDefs = parsed.shapes.map(s => ({ a: s.a, b: s.b }));
       const lockedFlags = parsed.shapes.map(s => s.locked);
       buildPuzzle(n, shapeDefs, lockedFlags, placements);
+      refreshManualEditor();
     }, 10);
   }
 
   function resetCurrentPieces() {
     if (pieces.length === 0) return;
+    invalidateSolution();
     occupancy = makeEmptyOccupancy(gridSize);
     shuffle(pieces);
     pieces.forEach(p => {
@@ -747,6 +915,12 @@
   lockCountInput.addEventListener('input', () => {
     lockCountVal.textContent = lockCountInput.value;
   });
+  gridSizeInput.addEventListener('input', refreshManualEditor);
+  manualShapes.addEventListener('input', refreshManualEditor);
+  manualShapes.addEventListener('scroll', () => {
+    manualHighlight.scrollTop = manualShapes.scrollTop;
+    manualHighlight.scrollLeft = manualShapes.scrollLeft;
+  });
 
   modeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -760,30 +934,30 @@
   generateBtn.addEventListener('click', startAutoPuzzle);
   buildBtn.addEventListener('click', startManualPuzzle);
   resetBtn.addEventListener('click', resetCurrentPieces);
+  computeBtn.addEventListener('click', computeSolution);
+  revealBtn.addEventListener('click', toggleReveal);
   playAgainBtn.addEventListener('click', () => {
     winBanner.classList.add('hidden');
     if (mode === 'auto') startAutoPuzzle(); else startManualPuzzle();
   });
-  hintToggle.addEventListener('change', () => {
-    hintLayer.style.display = hintToggle.checked ? 'block' : 'none';
-  });
 
   // ---- Boot: preload the requested 8x8 starter configuration -------------------
   const DEFAULT_PUZZLE = [
-    '4x3, yellow',
-    '2x2, red',
-    '2x4, white',
-    '2x3, blue',
-    '2x1, grey, locked',
-    '2x5, yellow',
-    '1x5, red',
-    '3x3, white',
-    '4x1, blue',
-    '1x1, grey, locked',
-    '1x3, grey, locked',
+    '3, 4',
+    '2, 2',
+    '4, 2',
+    '3, 2',
+    '1, 2, locked',
+    '5, 2',
+    '5, 1',
+    '3, 3',
+    '1, 4',
+    '1, 1, locked',
+    '3, 1, locked',
   ].join('\n');
 
   gridSizeInput.value = 8;
   manualShapes.value = DEFAULT_PUZZLE;
+  refreshManualEditor();
   startManualPuzzle();
 })();
