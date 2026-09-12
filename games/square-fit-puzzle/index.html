@@ -20,6 +20,7 @@
       <h3>Setup</h3>
       <ul>
         <li><strong>Square size</strong> — cells per side, up to 9.</li>
+        <li><strong>Levels</strong> — pick a hand-designed puzzle from the list and load it. Levels live in this game's <code>levels/</code> and <code>piece-lists/</code> folders in the repo, if you want to add your own.</li>
         <li><strong>Auto-generate</strong> — pick a piece count (and how many start locked as "starters"), then Generate. Pieces are cut straight out of the square, so it's always solvable.</li>
         <li><strong>Manual shapes</strong> — type one piece per line: <code>h, w, locked</code>. "locked" is optional — colors are assigned automatically. Add <code>locked@x-y</code> instead of <code>locked</code> to pin a piece to an exact top-left cell (0-indexed). Piece areas must add up to size².</li>
       </ul>
@@ -44,9 +45,17 @@
     <div class="control-group mode-group">
       <label>Piece source</label>
       <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="levels" type="button">Levels</button>
         <button class="mode-btn" data-mode="auto" type="button">Auto-generate</button>
-        <button class="mode-btn active" data-mode="manual" type="button">Manual shapes</button>
+        <button class="mode-btn" data-mode="manual" type="button">Manual shapes</button>
       </div>
+    </div>
+
+    <div class="control-group" id="levelControls">
+      <label for="levelSelect">Pick a level</label>
+      <select id="levelSelect"></select>
+      <button id="loadLevelBtn" class="primary-btn" type="button">Load level</button>
+      <div id="levelError" class="error-msg"></div>
     </div>
 
     <div class="control-group hidden" id="autoControls">
@@ -57,7 +66,7 @@
       <button id="generateBtn" class="primary-btn" type="button">Generate puzzle</button>
     </div>
 
-    <div class="control-group" id="manualControls">
+    <div class="control-group hidden" id="manualControls">
       <label for="manualShapes">Pieces — one per line: <code>h, w, locked</code>. "locked" is optional; "locked@x-y" pins an exact top-left cell. Areas must sum to size².</label>
       <div class="shapes-editor">
         <div id="manualHighlight" class="shapes-highlight" aria-hidden="true"></div>
@@ -105,7 +114,7 @@
   </div>
 
   <footer>
-    <p>Pieces are cut from the square with a random guillotine partition (auto mode), or fitted with a backtracking exact-cover solver (manual mode) — so every puzzle is guaranteed solvable, starters included.</p>
+    <p>Pieces are cut from the square with a random guillotine partition (auto mode), or fitted with a backtracking exact-cover solver (manual shapes and levels) — so every puzzle is guaranteed solvable, starters included.</p>
   </footer>
 </div>
 <script src="script.js"></script>

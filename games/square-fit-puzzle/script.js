@@ -33,6 +33,10 @@
   const modeBtns = document.querySelectorAll('.mode-btn');
   const autoControls = document.getElementById('autoControls');
   const manualControls = document.getElementById('manualControls');
+  const levelControls = document.getElementById('levelControls');
+  const levelSelect = document.getElementById('levelSelect');
+  const loadLevelBtn = document.getElementById('loadLevelBtn');
+  const levelError = document.getElementById('levelError');
 
   const playfield = document.getElementById('playfield');
   const squareEl = document.getElementById('square');
@@ -87,7 +91,7 @@
   let timerHandle = null;
   let gameActive = false;
   let zTop = 10;
-  let mode = 'manual';
+  let mode = 'levels';
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function makeEmptyOccupancy(n) { return Array.from({ length: n }, () => new Array(n).fill(-1)); }
@@ -168,9 +172,34 @@
     return { a: w, b: h, locked, fixedX, fixedY };
   }
 
+  // Shared by manual-text parsing and level loading: checks that piece areas
+  // sum to exactly the square, and that fixed/locked pieces fit on the board
+  // without overlapping each other. Returns an error string, or null if OK.
+  function validateShapeSet(shapes, n) {
+    const sumArea = shapes.reduce((s, r) => s + r.a * r.b, 0);
+    if (sumArea !== n * n) {
+      return `Piece areas sum to ${sumArea}, but a ${n}x${n} square needs ${n * n}.`;
+    }
+    const mask = makeEmptyOccupancy(n);
+    for (let i = 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (s.fixedX == null) continue;
+      if (s.fixedX < 0 || s.fixedY < 0 || s.fixedX + s.a > n || s.fixedY + s.b > n) {
+        return `Locked piece ${i} (${s.a}x${s.b} at ${s.fixedX},${s.fixedY}) doesn't fit in the ${n}x${n} square.`;
+      }
+      for (let yy = s.fixedY; yy < s.fixedY + s.b; yy++) {
+        for (let xx = s.fixedX; xx < s.fixedX + s.a; xx++) {
+          if (mask[yy][xx] !== -1) return `Locked pieces overlap at (${xx},${yy}).`;
+          mask[yy][xx] = i;
+        }
+      }
+    }
+    return null;
+  }
+
   function parseCustomShapes(text, n) {
     const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
-    if (lines.length === 0) return { error: 'Enter at least one piece, like "3, 4, blue".' };
+    if (lines.length === 0) return { error: 'Enter at least one piece, like "3, 4".' };
     const shapes = [];
     const errors = [];
     lines.forEach((line, idx) => {
@@ -180,22 +209,8 @@
     });
     if (errors.length > 0) return { error: errors.join(' ') };
 
-    const sumArea = shapes.reduce((s, r) => s + r.a * r.b, 0);
-    if (sumArea !== n * n) {
-      return { error: `Piece areas sum to ${sumArea}, but a ${n}x${n} square needs ${n * n}.` };
-    }
-    // Fixed-position pieces must not overlap each other.
-    const mask = makeEmptyOccupancy(n);
-    for (let i = 0; i < shapes.length; i++) {
-      const s = shapes[i];
-      if (s.fixedX === null) continue;
-      for (let yy = s.fixedY; yy < s.fixedY + s.b; yy++) {
-        for (let xx = s.fixedX; xx < s.fixedX + s.a; xx++) {
-          if (mask[yy][xx] !== -1) return { error: `Locked pieces overlap at (${xx},${yy}).` };
-          mask[yy][xx] = i;
-        }
-      }
-    }
+    const setError = validateShapeSet(shapes, n);
+    if (setError) return { error: setError };
     return { shapes };
   }
 
@@ -876,6 +891,97 @@
     }, 10);
   }
 
+  // ---- Levels: load a piece list + fixed starter positions from JSON ----------
+  async function fetchJson(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Couldn't load ${url} (HTTP ${res.status})`);
+    return res.json();
+  }
+
+  // "horizontal" = the piece's longer side runs left-right; "vertical" = it
+  // runs top-to-bottom. A no-op for square pieces. Independent of how the
+  // piece list happens to order its h/w fields.
+  function orientedDims(piece, orientation) {
+    const long = Math.max(piece.h, piece.w), short = Math.min(piece.h, piece.w);
+    return orientation === 'vertical' ? { w: short, h: long } : { w: long, h: short };
+  }
+
+  async function populateLevelSelect() {
+    levelSelect.innerHTML = '<option value="">Loading…</option>';
+    let ids = [];
+    try {
+      ids = await fetchJson('levels/levels.json');
+    } catch (err) {
+      levelSelect.innerHTML = '<option value="">(no levels found)</option>';
+      return;
+    }
+    const options = [];
+    for (const id of ids) {
+      try {
+        const level = await fetchJson(`levels/${id}.json`);
+        options.push({ id, label: level.name || id });
+      } catch (err) {
+        console.error(`Skipping level "${id}":`, err);
+      }
+    }
+    levelSelect.innerHTML = '';
+    if (options.length === 0) {
+      levelSelect.innerHTML = '<option value="">(no levels found)</option>';
+      return;
+    }
+    for (const opt of options) {
+      const el = document.createElement('option');
+      el.value = opt.id;
+      el.textContent = opt.label;
+      levelSelect.appendChild(el);
+    }
+  }
+
+  function startLevelPuzzle() {
+    levelError.textContent = '';
+    const id = levelSelect.value;
+    if (!id) {
+      levelError.textContent = 'No level selected.';
+      return;
+    }
+    loadLevelBtn.disabled = true;
+    loadLevelBtn.textContent = 'Loading…';
+
+    (async () => {
+      const level = await fetchJson(`levels/${id}.json`);
+      const pieceList = await fetchJson(`piece-lists/${level.pieceList}.json`);
+      const n = clamp(parseInt(level.gridSize, 10) || 8, 4, MAX_GRID_SIZE);
+
+      const lockedByIndex = new Map((level.locked || []).map(l => [l.index, l]));
+      const shapes = pieceList.pieces.map(piece => {
+        const lockEntry = lockedByIndex.get(piece.index);
+        if (lockEntry) {
+          const { w, h } = orientedDims(piece, lockEntry.orientation);
+          return { a: w, b: h, locked: true, fixedX: lockEntry.x, fixedY: lockEntry.y };
+        }
+        return { a: piece.w, b: piece.h, locked: false, fixedX: null, fixedY: null };
+      });
+
+      const setError = validateShapeSet(shapes, n);
+      if (setError) throw new Error(setError);
+
+      const placements = solveExactCover(n, shapes);
+      if (placements === 'timeout') throw new Error('Took too long to solve this level.');
+      if (!placements) throw new Error('This level has no valid solution as defined — check the locked positions.');
+
+      gridSizeInput.value = n;
+      computeGeometry(n);
+      const shapeDefs = shapes.map(s => ({ a: s.a, b: s.b }));
+      const lockedFlags = shapes.map(s => s.locked);
+      buildPuzzle(n, shapeDefs, lockedFlags, placements);
+    })().catch(err => {
+      levelError.textContent = err.message || String(err);
+    }).finally(() => {
+      loadLevelBtn.disabled = false;
+      loadLevelBtn.textContent = 'Load level';
+    });
+  }
+
   function resetCurrentPieces() {
     if (pieces.length === 0) return;
     invalidateSolution();
@@ -928,36 +1034,36 @@
       modeBtns.forEach(b => b.classList.toggle('active', b === btn));
       autoControls.classList.toggle('hidden', mode !== 'auto');
       manualControls.classList.toggle('hidden', mode !== 'manual');
+      levelControls.classList.toggle('hidden', mode !== 'levels');
     });
   });
 
+  function startForMode() {
+    if (mode === 'auto') startAutoPuzzle();
+    else if (mode === 'manual') startManualPuzzle();
+    else startLevelPuzzle();
+  }
+
   generateBtn.addEventListener('click', startAutoPuzzle);
   buildBtn.addEventListener('click', startManualPuzzle);
+  loadLevelBtn.addEventListener('click', startLevelPuzzle);
   resetBtn.addEventListener('click', resetCurrentPieces);
   computeBtn.addEventListener('click', computeSolution);
   revealBtn.addEventListener('click', toggleReveal);
   playAgainBtn.addEventListener('click', () => {
     winBanner.classList.add('hidden');
-    if (mode === 'auto') startAutoPuzzle(); else startManualPuzzle();
+    startForMode();
   });
 
-  // ---- Boot: preload the requested 8x8 starter configuration -------------------
-  const DEFAULT_PUZZLE = [
-    '3, 4',
-    '2, 2',
-    '4, 2',
-    '3, 2',
-    '1, 2, locked',
-    '5, 2',
-    '5, 1',
-    '3, 3',
-    '1, 4',
-    '1, 1, locked',
-    '3, 1, locked',
-  ].join('\n');
-
-  gridSizeInput.value = 8;
-  manualShapes.value = DEFAULT_PUZZLE;
+  // ---- Boot: load the level picker and start on the default level -------------
+  mode = 'levels';
+  modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === 'levels'));
+  autoControls.classList.add('hidden');
+  manualControls.classList.add('hidden');
+  levelControls.classList.remove('hidden');
   refreshManualEditor();
-  startManualPuzzle();
+
+  populateLevelSelect().then(() => {
+    if (levelSelect.value) startLevelPuzzle();
+  });
 })();
