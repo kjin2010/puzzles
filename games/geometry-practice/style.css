@@ -284,3 +284,179 @@ header h1 {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.plot-wrap {
+  margin: 4px 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.dilation-plot {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+.plot-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.plot-axis {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
+.plot-polygon {
+  fill: none;
+  stroke-width: 2;
+}
+
+.plot-polygon-original {
+  stroke: var(--ink);
+  fill: rgba(35, 32, 26, 0.06);
+}
+
+.plot-polygon-ref {
+  stroke: var(--good);
+  stroke-dasharray: 5 4;
+  fill: none;
+}
+
+.plot-polygon-correct {
+  stroke: var(--good);
+  fill: rgba(63, 145, 66, 0.12);
+}
+
+.plot-polygon-wrong {
+  stroke: var(--bad);
+  fill: rgba(193, 68, 45, 0.1);
+}
+
+.plot-point.plot-original {
+  fill: var(--ink);
+}
+
+.plot-point.plot-correct {
+  fill: var(--good);
+}
+
+.plot-point.plot-wrong {
+  fill: var(--bad);
+}
+
+.plot-center line {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
+.plot-center text {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.plot-label {
+  font-size: 12px;
+  fill: var(--ink);
+}
+
+.plot-label-correct {
+  fill: var(--good);
+}
+
+.plot-label-wrong {
+  fill: var(--bad);
+}
+
+.generator-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.new-shape-btn {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.new-shape-btn:hover {
+  opacity: 0.92;
+}
+
+.generator-stats {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.vertex-input-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.point-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  flex-wrap: wrap;
+}
+
+.point-input {
+  width: 66px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.point-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.point-input-row.is-correct .point-input {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.point-input-row.is-wrong .point-input {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.vertex-input-list.needs-input .point-input {
+  border-color: var(--bad);
+}
+
+.point-submit-btn {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.point-submit-btn:hover {
+  opacity: 0.92;
+}

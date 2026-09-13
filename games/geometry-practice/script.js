@@ -62,6 +62,17 @@ const SECTIONS = [
     ],
   },
   {
+    id: "dilation-graphing",
+    title: "Dilation Graphing",
+    type: "generator",
+    intro:
+      "Practice dilating whole shapes instead of single points. Every problem " +
+      "is randomly generated — a shape (triangle, rectangle, pentagon, or " +
+      "hexagon), a center of dilation, and a scale factor — so you can " +
+      "practice as many times as you want. Work out where each vertex's " +
+      "image lands, type in the coordinates, and check your answer.",
+  },
+  {
     id: "transformations",
     title: "Rigid Transformations",
     intro:
@@ -377,6 +388,156 @@ const SECTIONS = [
   },
 ];
 
+function fmtNum(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+// ---- Dilation Graphing: random shape generator ----
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+const SHAPE_TEMPLATES = {
+  triangle: [
+    { label: "Triangle", points: [[0, 0], [4, 0], [2, 3]] },
+    { label: "Triangle", points: [[0, 0], [3, 1], [1, 4]] },
+  ],
+  pentagon: [{ label: "Pentagon", points: [[0, 0], [4, 0], [5, 3], [2, 5], [-1, 3]] }],
+  hexagon: [{ label: "Hexagon", points: [[0, 0], [3, 0], [5, 2], [3, 4], [0, 4], [-2, 2]] }],
+};
+
+const SCALE_FACTORS = [-3, -2, -1, 1, 2, 3];
+
+function generateShape() {
+  const type = randChoice(["triangle", "rectangle", "pentagon", "hexagon"]);
+  let points;
+  let label;
+
+  if (type === "rectangle") {
+    const w = randChoice([2, 3, 4]);
+    const h = randChoice([2, 3, 4]);
+    points = [[0, 0], [w, 0], [w, h], [0, h]];
+    label = "Rectangle";
+  } else {
+    const tpl = randChoice(SHAPE_TEMPLATES[type]);
+    label = tpl.label;
+    const flipX = Math.random() < 0.5 ? -1 : 1;
+    const flipY = Math.random() < 0.5 ? -1 : 1;
+    points = tpl.points.map(([x, y]) => [x * flipX, y * flipY]);
+  }
+
+  const dx = randInt(-3, 3);
+  const dy = randInt(-3, 3);
+  points = points.map(([x, y]) => [x + dx, y + dy]);
+
+  return { type, label, points };
+}
+
+function generateProblem() {
+  const shape = generateShape();
+  const center = [randInt(-3, 3), randInt(-3, 3)];
+  const k = randChoice(SCALE_FACTORS);
+  const labels = shape.points.map((_, i) => String.fromCharCode(65 + i));
+  const image = shape.points.map(([x, y]) => [center[0] + k * (x - center[0]), center[1] + k * (y - center[1])]);
+  return { shapeLabel: shape.label, vertices: shape.points, labels, center, k, image };
+}
+
+// Labels default to sitting right of a point; if that would run past the
+// SVG's right edge (where content gets clipped since SVGs clip to their
+// viewBox by default), anchor them to the left of the point instead.
+function labelAttrs(px, text, width) {
+  const estWidth = text.length * 6.5;
+  if (px + 8 + estWidth > width) {
+    return { x: px - 8, anchor: "end" };
+  }
+  return { x: px + 8, anchor: "start" };
+}
+
+function polygonPointsAttr(svgPts) {
+  return svgPts.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
+function buildShapePlotSVG(problem, answer) {
+  const { vertices, center, image, labels } = problem;
+  const submitted = answer ? answer.entries : null;
+  const showImage = !!answer;
+  const showCorrectRef = answer && !answer.allCorrect;
+
+  const allPts = vertices.concat([center]);
+  if (submitted) allPts.push(...submitted);
+  if (showCorrectRef) allPts.push(...image);
+  const xs = allPts.map((p) => p[0]).concat([0]);
+  const ys = allPts.map((p) => p[1]).concat([0]);
+  const minX = Math.min(...xs) - 2;
+  const maxX = Math.max(...xs) + 2;
+  const minY = Math.min(...ys) - 2;
+  const maxY = Math.max(...ys) + 2;
+
+  const unit = 22;
+  const width = (maxX - minX) * unit;
+  const height = (maxY - minY) * unit;
+  const toSvg = ([x, y]) => [(x - minX) * unit, (maxY - y) * unit];
+
+  let grid = "";
+  for (let gx = Math.ceil(minX); gx <= Math.floor(maxX); gx++) {
+    const [sx] = toSvg([gx, 0]);
+    grid += `<line x1="${sx}" y1="0" x2="${sx}" y2="${height}" class="${gx === 0 ? "plot-axis" : "plot-grid"}" />`;
+  }
+  for (let gy = Math.ceil(minY); gy <= Math.floor(maxY); gy++) {
+    const [, sy] = toSvg([0, gy]);
+    grid += `<line x1="0" y1="${sy}" x2="${width}" y2="${sy}" class="${gy === 0 ? "plot-axis" : "plot-grid"}" />`;
+  }
+
+  const originalSvg = vertices.map(toSvg);
+  const [cx, cy] = toSvg(center);
+
+  let markup = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="dilation-plot" role="img" aria-label="Plot of the original shape and your submitted image">`;
+  markup += grid;
+
+  const cLabel = labelAttrs(cx, "center", width);
+  markup +=
+    `<g class="plot-center">` +
+    `<line x1="${cx - 6}" y1="${cy - 6}" x2="${cx + 6}" y2="${cy + 6}" />` +
+    `<line x1="${cx - 6}" y1="${cy + 6}" x2="${cx + 6}" y2="${cy - 6}" />` +
+    `<text x="${cLabel.x}" y="${cy - 8}" text-anchor="${cLabel.anchor}">center</text>` +
+    `</g>`;
+
+  if (showCorrectRef) {
+    const refSvg = image.map(toSvg);
+    markup += `<polygon points="${polygonPointsAttr(refSvg)}" class="plot-polygon plot-polygon-ref" />`;
+    const [rx, ry] = refSvg[0];
+    const refLabel = labelAttrs(rx, "correct image", width);
+    markup += `<text x="${refLabel.x}" y="${ry - 10}" text-anchor="${refLabel.anchor}" class="plot-label plot-label-correct">correct image</text>`;
+  }
+
+  if (showImage) {
+    const subSvg = submitted.map(toSvg);
+    markup += `<polygon points="${polygonPointsAttr(subSvg)}" class="plot-polygon ${answer.allCorrect ? "plot-polygon-correct" : "plot-polygon-wrong"}" />`;
+    subSvg.forEach(([px, py], i) => {
+      markup += `<circle cx="${px}" cy="${py}" r="4.5" class="plot-point ${answer.results[i] ? "plot-correct" : "plot-wrong"}" />`;
+    });
+    const [sx, sy] = subSvg[0];
+    const subLabel = labelAttrs(sx, "your answer", width);
+    markup += `<text x="${subLabel.x}" y="${sy + 16}" text-anchor="${subLabel.anchor}" class="plot-label ${answer.allCorrect ? "plot-label-correct" : "plot-label-wrong"}">your answer</text>`;
+  }
+
+  markup += `<polygon points="${polygonPointsAttr(originalSvg)}" class="plot-polygon plot-polygon-original" />`;
+  originalSvg.forEach(([px, py], i) => {
+    const lbl = labelAttrs(px, labels[i], width);
+    markup +=
+      `<circle cx="${px}" cy="${py}" r="4.5" class="plot-point plot-original" />` +
+      `<text x="${lbl.x}" y="${py - 8}" text-anchor="${lbl.anchor}" class="plot-label">${labels[i]}</text>`;
+  });
+
+  markup += `</svg>`;
+  return markup;
+}
+
 const STORAGE_KEY = "geometry-practice-progress";
 
 function loadProgress() {
@@ -398,6 +559,12 @@ function saveProgress(progress) {
 let progress = loadProgress();
 let activeSectionId = SECTIONS[0].id;
 
+// Generator-section state (not persisted — problems are randomly generated,
+// so there's nothing stable to save progress against).
+let currentProblem = null;
+let currentAnswer = null;
+const sessionStats = { attempted: 0, correct: 0 };
+
 function sectionScore(section) {
   let answered = 0;
   let correct = 0;
@@ -416,12 +583,18 @@ function renderNav() {
   const nav = document.getElementById("section-nav");
   nav.innerHTML = "";
   for (const section of SECTIONS) {
-    const { answered, correct, total } = sectionScore(section);
     const btn = document.createElement("button");
     btn.className = "nav-item" + (section.id === activeSectionId ? " active" : "");
-    btn.innerHTML =
-      `<span class="nav-title">${section.title}</span>` +
-      `<span class="nav-score">${answered ? correct + "/" + answered : ""} <span class="nav-total">of ${total}</span></span>`;
+    let scoreHtml;
+    if (section.type === "generator") {
+      scoreHtml = sessionStats.attempted
+        ? `${sessionStats.correct}/${sessionStats.attempted} <span class="nav-total">this session</span>`
+        : `<span class="nav-total">practice</span>`;
+    } else {
+      const { answered, correct, total } = sectionScore(section);
+      scoreHtml = `${answered ? correct + "/" + answered : ""} <span class="nav-total">of ${total}</span>`;
+    }
+    btn.innerHTML = `<span class="nav-title">${section.title}</span><span class="nav-score">${scoreHtml}</span>`;
     btn.addEventListener("click", () => {
       activeSectionId = section.id;
       renderNav();
@@ -442,6 +615,11 @@ function renderSection() {
   header.innerHTML = `<h2>${section.title}</h2><p class="section-intro">${section.intro}</p>`;
   main.appendChild(header);
 
+  if (section.type === "generator") {
+    renderGeneratorSection(main);
+    return;
+  }
+
   section.questions.forEach((q, qIndex) => {
     const key = section.id + ":" + q.prompt;
     const card = document.createElement("div");
@@ -452,10 +630,10 @@ function renderSection() {
     promptEl.textContent = `${qIndex + 1}. ${q.prompt}`;
     card.appendChild(promptEl);
 
+    const state = progress[key];
+
     const choicesEl = document.createElement("div");
     choicesEl.className = "q-choices";
-
-    const state = progress[key];
 
     q.choices.forEach((choiceText, cIndex) => {
       const choiceBtn = document.createElement("button");
@@ -509,6 +687,166 @@ function renderSection() {
 
     main.appendChild(card);
   });
+}
+
+function renderGeneratorSection(main) {
+  if (!currentProblem) currentProblem = generateProblem();
+  const problem = currentProblem;
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "generator-toolbar";
+
+  const newShapeBtn = document.createElement("button");
+  newShapeBtn.className = "new-shape-btn";
+  newShapeBtn.textContent = "New shape";
+  newShapeBtn.addEventListener("click", () => {
+    currentProblem = generateProblem();
+    currentAnswer = null;
+    renderNav();
+    renderSection();
+  });
+
+  const stats = document.createElement("span");
+  stats.className = "generator-stats";
+  stats.textContent = sessionStats.attempted
+    ? `Session: ${sessionStats.correct}/${sessionStats.attempted} fully correct`
+    : "";
+
+  toolbar.appendChild(newShapeBtn);
+  toolbar.appendChild(stats);
+  main.appendChild(toolbar);
+
+  const card = document.createElement("div");
+  card.className = "q-card";
+
+  const shapeName = `${problem.shapeLabel} ${problem.labels.join("")}`;
+  const promptEl = document.createElement("div");
+  promptEl.className = "q-prompt";
+  promptEl.textContent =
+    `Dilate ${shapeName} from center C(${fmtNum(problem.center[0])}, ${fmtNum(problem.center[1])}) ` +
+    `with scale factor k = ${problem.k}. Enter the coordinates of each image vertex.`;
+  card.appendChild(promptEl);
+
+  const plotWrap = document.createElement("div");
+  plotWrap.className = "plot-wrap";
+  plotWrap.innerHTML = buildShapePlotSVG(problem, currentAnswer);
+  card.appendChild(plotWrap);
+
+  const vertexList = document.createElement("div");
+  vertexList.className = "vertex-input-list";
+  const inputs = [];
+
+  problem.labels.forEach((label, i) => {
+    const row = document.createElement("div");
+    row.className = "point-input-row";
+    if (currentAnswer) {
+      row.classList.add(currentAnswer.results[i] ? "is-correct" : "is-wrong");
+    }
+
+    const xInput = document.createElement("input");
+    xInput.type = "number";
+    xInput.className = "point-input";
+    xInput.placeholder = "x";
+    xInput.step = "any";
+    xInput.setAttribute("aria-label", `x coordinate of ${label}'`);
+
+    const yInput = document.createElement("input");
+    yInput.type = "number";
+    yInput.className = "point-input";
+    yInput.placeholder = "y";
+    yInput.step = "any";
+    yInput.setAttribute("aria-label", `y coordinate of ${label}'`);
+
+    if (currentAnswer) {
+      xInput.value = currentAnswer.entries[i][0];
+      yInput.value = currentAnswer.entries[i][1];
+      xInput.disabled = true;
+      yInput.disabled = true;
+    }
+
+    inputs.push([xInput, yInput]);
+
+    row.appendChild(document.createTextNode(`${label}′ (`));
+    row.appendChild(xInput);
+    row.appendChild(document.createTextNode(","));
+    row.appendChild(yInput);
+    row.appendChild(document.createTextNode(")"));
+    vertexList.appendChild(row);
+  });
+
+  card.appendChild(vertexList);
+
+  if (!currentAnswer) {
+    const checkBtn = document.createElement("button");
+    checkBtn.className = "point-submit-btn";
+    checkBtn.textContent = "Check answer";
+
+    const submit = () => {
+      const entries = [];
+      for (const [xInput, yInput] of inputs) {
+        const xVal = parseFloat(xInput.value);
+        const yVal = parseFloat(yInput.value);
+        if (Number.isNaN(xVal) || Number.isNaN(yVal)) {
+          vertexList.classList.add("needs-input");
+          return;
+        }
+        entries.push([xVal, yVal]);
+      }
+      const results = entries.map(
+        ([xVal, yVal], i) =>
+          Math.abs(xVal - problem.image[i][0]) < 1e-9 && Math.abs(yVal - problem.image[i][1]) < 1e-9
+      );
+      const allCorrect = results.every(Boolean);
+      currentAnswer = { entries, results, allCorrect };
+      sessionStats.attempted++;
+      if (allCorrect) sessionStats.correct++;
+      renderNav();
+      renderSection();
+    };
+
+    inputs.forEach(([xInput, yInput]) => {
+      [xInput, yInput].forEach((input) => {
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") submit();
+        });
+        input.addEventListener("input", () => vertexList.classList.remove("needs-input"));
+      });
+    });
+    checkBtn.addEventListener("click", submit);
+    card.appendChild(checkBtn);
+  } else {
+    const feedback = document.createElement("div");
+    feedback.className = "q-feedback " + (currentAnswer.allCorrect ? "is-correct" : "is-wrong");
+    const verdict = document.createElement("div");
+    verdict.className = "q-verdict";
+    const correctCount = currentAnswer.results.filter(Boolean).length;
+    verdict.textContent = currentAnswer.allCorrect
+      ? "✓ Correct — every vertex matches"
+      : `✗ ${correctCount}/${currentAnswer.results.length} vertices correct`;
+    feedback.appendChild(verdict);
+
+    const explanation = document.createElement("p");
+    explanation.className = "q-explanation";
+    explanation.textContent =
+      `Each image vertex is P' = C + k(P − C), with C = (${fmtNum(problem.center[0])}, ${fmtNum(problem.center[1])}) ` +
+      `and k = ${problem.k}. Correct image: ` +
+      problem.labels.map((label, i) => `${label}′(${fmtNum(problem.image[i][0])}, ${fmtNum(problem.image[i][1])})`).join(", ") +
+      ".";
+    feedback.appendChild(explanation);
+
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "retry-btn";
+    retryBtn.textContent = "Try this shape again";
+    retryBtn.addEventListener("click", () => {
+      currentAnswer = null;
+      renderSection();
+    });
+    feedback.appendChild(retryBtn);
+
+    card.appendChild(feedback);
+  }
+
+  main.appendChild(card);
 }
 
 document.getElementById("reset-all").addEventListener("click", () => {
